@@ -1,0 +1,16 @@
+GitHub Repository Description:
+Native PDF viewer plugin for Capacitor with smooth pinch-to-zoom and inline display support
+
+GitHub Topics (add these):
+- capacitor
+- capacitor-plugin
+- pdf
+- pdf-viewer
+- ios
+- android
+- pdfkit
+- ionic
+- mobile
+
+About section:
+A high-performance native PDF viewer plugin for Capacitor applications. Features smooth pinch-to-zoom, search functionality with highlighting, and seamless inline display within your app's UI. Currently supports iOS with PDFKit, Android implementation ready for community contributions.

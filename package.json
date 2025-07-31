@@ -14,7 +14,7 @@
     "ios/Plugin/",
     "CapacitorInlinePdf.podspec"
   ],
-  "author": "Protean Connect",
+  "author": "John Cornett",
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -37,6 +37,15 @@ npm install capacitor-inline-pdf
 npx cap sync
 ```
 
+### Install from GitHub
+
+To install the latest development version:
+
+```bash
+npm install https://github.com/ProteanHub/capacitor-inline-pdf.git
+npx cap sync
+```
+
 ## Quick Example
 
 Here's how simple it is to add a native PDF viewer to your app:
