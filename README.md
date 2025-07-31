@@ -2,11 +2,61 @@
 
 Native PDF viewer plugin for Capacitor with inline display support
 
+## Why This Plugin Exists
+
+*"We tried everything. WebView PDF rendering? Janky zoom. PDF.js? Blurry during pinch gestures. Native viewers? They all went fullscreen."*
+
+If you've built a mobile app with PDFs, you know the struggle. Users expect the same smooth, responsive PDF experience they get in native apps - buttery smooth pinch-to-zoom, crisp text at any zoom level, and instant response to gestures. Web-based solutions just can't deliver this.
+
+This plugin was born from the frustration of trying to display medical reference PDFs in a healthcare app. We needed:
+- **Smooth native performance** - Medical professionals don't have time for lag
+- **Inline display** - PDFs needed to appear within our app's navigation, not take over the screen
+- **Reliable zoom** - When you're looking at detailed medical algorithms, precision matters
+- **Text search** - Finding critical information quickly can make a real difference
+
+After multiple attempts with web-based renderers and various workarounds (check our git history for the graveyard of attempts 😅), we built what we actually needed: a plugin that embeds native PDF rendering directly in your app's UI.
+
+## Features
+
+- 🚀 **True Native Performance** - Uses PDFKit on iOS for the smooth zoom you expect
+- 📱 **Inline Display** - Shows PDFs within your app layout, respecting your navigation
+- 🔍 **Search with Highlighting** - Find and highlight text with native performance
+- 🎯 **Precise Zoom Control** - Track zoom levels, reset to 100%, no more guessing
+- 📄 **Smart Page Navigation** - Jump between pages with optional animations
+- 🎨 **Fully Customizable** - Position it anywhere, style it your way
+
+## Requirements
+
+- Capacitor 6.0+
+- iOS 14.0+ (Android implementation welcome - PRs appreciated!)
+
 ## Install
 
 ```bash
 npm install capacitor-inline-pdf
 npx cap sync
+```
+
+## Quick Example
+
+Here's how simple it is to add a native PDF viewer to your app:
+
+```typescript
+import { InlinePDF } from 'capacitor-inline-pdf';
+
+// Create the viewer
+const { viewerId } = await InlinePDF.create({
+  containerId: 'my-pdf-container',
+  rect: { x: 0, y: 100, width: 390, height: 600 }
+});
+
+// Load your PDF
+await InlinePDF.loadPDF({
+  viewerId,
+  url: 'https://example.com/my-document.pdf'
+});
+
+// That's it! Your users can now pinch, zoom, and scroll with native performance
 ```
 
 ## API
