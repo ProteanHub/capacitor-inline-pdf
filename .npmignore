@@ -1,0 +1,50 @@
+# Build files
+*.ts
+!*.d.ts
+*.map
+src/
+
+# Development files
+rollup.config.js
+tsconfig.json
+.eslintrc.json
+.prettierrc.json
+.swiftlint.yml
+
+# iOS build files
+ios/build/
+ios/Pods/
+ios/Plugin.xcworkspace/
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+
+# Android build files
+android/build/
+android/.gradle/
+android/local.properties
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Documentation source
+docs/
+*.md
+!README.md
+!LICENSE
+
+# Git files
+.git/
+.gitignore
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
