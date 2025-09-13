@@ -80,11 +80,15 @@ await InlinePDF.loadPDF({
 * [`updateRect(...)`](#updaterect)
 * [`resetZoom(...)`](#resetzoom)
 * [`clearHighlights(...)`](#clearhighlights)
+* [`showOverlay(...)`](#showoverlay)
+* [`hideOverlay(...)`](#hideoverlay)
+* [`updateOverlayContent(...)`](#updateoverlaycontent)
 * [`destroy(...)`](#destroy)
 * [`addListener('gestureStart', ...)`](#addlistenergesturestart-)
 * [`addListener('gestureEnd', ...)`](#addlistenergestureend-)
 * [`addListener('pageChanged', ...)`](#addlistenerpagechanged-)
 * [`addListener('zoomChanged', ...)`](#addlistenerzoomchanged-)
+* [`addListener('overlayAction', ...)`](#addlisteneroverlayaction-)
 * [Interfaces](#interfaces)
 
 </docgen-index>
@@ -218,6 +222,51 @@ Clear search highlights
 --------------------
 
 
+### showOverlay(...)
+
+```typescript
+showOverlay(options: ShowOverlayOptions) => Promise<void>
+```
+
+Show an overlay with custom HTML content
+
+| Param         | Type                                                              |
+| ------------- | ----------------------------------------------------------------- |
+| **`options`** | <code><a href="#showoverlayoptions">ShowOverlayOptions</a></code> |
+
+--------------------
+
+
+### hideOverlay(...)
+
+```typescript
+hideOverlay(options: HideOverlayOptions) => Promise<void>
+```
+
+Hide the current overlay
+
+| Param         | Type                                                              |
+| ------------- | ----------------------------------------------------------------- |
+| **`options`** | <code><a href="#hideoverlayoptions">HideOverlayOptions</a></code> |
+
+--------------------
+
+
+### updateOverlayContent(...)
+
+```typescript
+updateOverlayContent(options: UpdateOverlayOptions) => Promise<void>
+```
+
+Update overlay content without hiding/showing
+
+| Param         | Type                                                                  |
+| ------------- | --------------------------------------------------------------------- |
+| **`options`** | <code><a href="#updateoverlayoptions">UpdateOverlayOptions</a></code> |
+
+--------------------
+
+
 ### destroy(...)
 
 ```typescript
@@ -299,6 +348,24 @@ Add event listener for zoom changes
 | -------------- | ------------------------------------------------- |
 | **`event`**    | <code>'zoomChanged'</code>                        |
 | **`listener`** | <code>(data: { zoom: number; }) =&gt; void</code> |
+
+**Returns:** <code>Promise&lt;{ remove: () =&gt; void; }&gt;</code>
+
+--------------------
+
+
+### addListener('overlayAction', ...)
+
+```typescript
+addListener(event: 'overlayAction', listener: (data: OverlayActionEvent) => void) => Promise<{ remove: () => void; }>
+```
+
+Add event listener for overlay actions (link taps, dismissal, etc)
+
+| Param          | Type                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------ |
+| **`event`**    | <code>'overlayAction'</code>                                                         |
+| **`listener`** | <code>(data: <a href="#overlayactionevent">OverlayActionEvent</a>) =&gt; void</code> |
 
 **Returns:** <code>Promise&lt;{ remove: () =&gt; void; }&gt;</code>
 
@@ -406,10 +473,47 @@ Add event listener for zoom changes
 | **`viewerId`** | <code>string</code> |
 
 
+#### ShowOverlayOptions
+
+| Prop           | Type                                                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`viewerId`** | <code>string</code>                                                                                                                        |
+| **`position`** | <code>'bottom' \| 'top' \| 'left' \| 'right' \| 'center' \| 'fullscreen'</code>                                                            |
+| **`size`**     | <code>{ width?: string; height?: string; }</code>                                                                                          |
+| **`content`**  | <code>{ html?: string; type?: 'html' \| 'native'; interceptLinks?: boolean; linkPrefix?: string; }</code>                                  |
+| **`style`**    | <code>{ backgroundColor?: string; textColor?: string; padding?: number; borderRadius?: number; opacity?: number; blur?: boolean; }</code>  |
+| **`behavior`** | <code>{ dismissible?: boolean; dismissOnTapOutside?: boolean; showCloseButton?: boolean; animation?: 'slide' \| 'fade' \| 'none'; }</code> |
+
+
+#### HideOverlayOptions
+
+| Prop            | Type                 |
+| --------------- | -------------------- |
+| **`viewerId`**  | <code>string</code>  |
+| **`animation`** | <code>boolean</code> |
+
+
+#### UpdateOverlayOptions
+
+| Prop           | Type                                                       |
+| -------------- | ---------------------------------------------------------- |
+| **`viewerId`** | <code>string</code>                                        |
+| **`content`**  | <code>{ html?: string; type?: 'html' \| 'native'; }</code> |
+
+
 #### DestroyOptions
 
 | Prop           | Type                |
 | -------------- | ------------------- |
 | **`viewerId`** | <code>string</code> |
+
+
+#### OverlayActionEvent
+
+| Prop           | Type                                                                                               |
+| -------------- | -------------------------------------------------------------------------------------------------- |
+| **`viewerId`** | <code>string</code>                                                                                |
+| **`action`**   | <code>'linkTapped' \| 'dismissed' \| 'buttonPressed' \| 'customAction' \| 'showMedications'</code> |
+| **`data`**     | <code>{ url?: string; linkId?: string; buttonId?: string; customData?: any; }</code>               |
 
 </docgen-api>

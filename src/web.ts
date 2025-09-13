@@ -11,7 +11,10 @@ import type {
   PDFState,
   UpdateRectOptions,
   ResetZoomOptions,
-  DestroyOptions
+  DestroyOptions,
+  ShowOverlayOptions,
+  HideOverlayOptions,
+  UpdateOverlayOptions
 } from './definitions';
 
 export class InlinePDFWeb extends WebPlugin implements InlinePDFPlugin {
@@ -95,6 +98,40 @@ export class InlinePDFWeb extends WebPlugin implements InlinePDFPlugin {
     
     // Web implementation would clear highlights
     console.log('Clearing highlights');
+  }
+
+  async showOverlay(options: ShowOverlayOptions): Promise<void> {
+    const viewer = this.viewers.get(options.viewerId);
+    if (!viewer) {
+      throw new Error(`Viewer with id ${options.viewerId} not found`);
+    }
+    
+    // Web implementation would show overlay
+    console.log('Showing overlay:', options.position);
+    viewer.overlayVisible = true;
+    viewer.overlayContent = options.content;
+  }
+
+  async hideOverlay(options: HideOverlayOptions): Promise<void> {
+    const viewer = this.viewers.get(options.viewerId);
+    if (!viewer) {
+      throw new Error(`Viewer with id ${options.viewerId} not found`);
+    }
+    
+    // Web implementation would hide overlay
+    console.log('Hiding overlay');
+    viewer.overlayVisible = false;
+  }
+
+  async updateOverlayContent(options: UpdateOverlayOptions): Promise<void> {
+    const viewer = this.viewers.get(options.viewerId);
+    if (!viewer) {
+      throw new Error(`Viewer with id ${options.viewerId} not found`);
+    }
+    
+    // Web implementation would update overlay content
+    console.log('Updating overlay content');
+    viewer.overlayContent = options.content;
   }
 
   async destroy(options: DestroyOptions): Promise<void> {

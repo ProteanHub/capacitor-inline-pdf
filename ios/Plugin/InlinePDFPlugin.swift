@@ -42,6 +42,9 @@ public class InlinePDFPlugin: CAPPlugin {
             
             let pdfVC = InlinePDFViewController()
             
+            // Set plugin reference so FAB can communicate back
+            pdfVC.plugin = self
+            
             // Configure initial settings
             if let bgColor = call.getString("backgroundColor") {
                 pdfVC.backgroundColor = bgColor
@@ -254,6 +257,75 @@ public class InlinePDFPlugin: CAPPlugin {
         }
     }
     
+    @objc func showOverlay(_ call: CAPPluginCall) {
+        guard let viewerId = call.getString("viewerId"),
+              let pdfVC = pdfViews[viewerId] else {
+            call.reject("Invalid viewer ID")
+            return
+        }
+        
+        guard let position = call.getString("position") else {
+            call.reject("Missing position parameter")
+            return
+        }
+        
+        guard let content = call.getObject("content"),
+              let html = content["html"] as? String else {
+            call.reject("Missing HTML content")
+            return
+        }
+        
+        let size = call.getObject("size")
+        let style = call.getObject("style")
+        let behavior = call.getObject("behavior")
+        
+        DispatchQueue.main.async {
+            pdfVC.showOverlay(
+                html: html,
+                position: position,
+                size: size,
+                style: style,
+                behavior: behavior,
+                plugin: self
+            )
+            call.resolve()
+        }
+    }
+    
+    @objc func hideOverlay(_ call: CAPPluginCall) {
+        guard let viewerId = call.getString("viewerId"),
+              let pdfVC = pdfViews[viewerId] else {
+            call.reject("Invalid viewer ID")
+            return
+        }
+        
+        let animated = call.getBool("animation") ?? true
+        
+        DispatchQueue.main.async {
+            pdfVC.hideOverlay(animated: animated)
+            call.resolve()
+        }
+    }
+    
+    @objc func updateOverlayContent(_ call: CAPPluginCall) {
+        guard let viewerId = call.getString("viewerId"),
+              let pdfVC = pdfViews[viewerId] else {
+            call.reject("Invalid viewer ID")
+            return
+        }
+        
+        guard let content = call.getObject("content"),
+              let html = content["html"] as? String else {
+            call.reject("Missing HTML content")
+            return
+        }
+        
+        DispatchQueue.main.async {
+            pdfVC.updateOverlayContent(html: html)
+            call.resolve()
+        }
+    }
+    
     @objc func destroy(_ call: CAPPluginCall) {
         guard let viewerId = call.getString("viewerId"),
               let pdfVC = pdfViews[viewerId] else {
@@ -263,6 +335,9 @@ public class InlinePDFPlugin: CAPPlugin {
         
         DispatchQueue.main.async {
             print("InlinePDF: Destroying PDF view with id: \(viewerId)")
+            
+            // Hide overlay if present
+            pdfVC.hideOverlay(animated: false)
             
             // Properly remove child view controller
             pdfVC.willMove(toParent: nil)
@@ -279,5 +354,24 @@ public class InlinePDFPlugin: CAPPlugin {
             print("InlinePDF: PDF view destroyed successfully")
             call.resolve()
         }
+    }
+    
+    // Public method to send overlay actions from native FAB
+    func sendOverlayAction(action: String, data: [String: Any]) {
+        print("InlinePDF Plugin: sendOverlayAction called")
+        print("  - Action: \(action)")
+        print("  - Data: \(data)")
+        
+        let eventData: [String: Any] = [
+            "action": action,
+            "data": data
+        ]
+        
+        print("InlinePDF Plugin: Notifying listeners with data: \(eventData)")
+        
+        // Notify JS listeners about the overlay action
+        notifyListeners("overlayAction", data: eventData)
+        
+        print("InlinePDF Plugin: Notification sent")
     }
 }

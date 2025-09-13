@@ -40,6 +40,21 @@ export interface InlinePDFPlugin {
   clearHighlights(options: ClearHighlightsOptions): Promise<void>;
   
   /**
+   * Show an overlay with custom HTML content
+   */
+  showOverlay(options: ShowOverlayOptions): Promise<void>;
+  
+  /**
+   * Hide the current overlay
+   */
+  hideOverlay(options: HideOverlayOptions): Promise<void>;
+  
+  /**
+   * Update overlay content without hiding/showing
+   */
+  updateOverlayContent(options: UpdateOverlayOptions): Promise<void>;
+  
+  /**
    * Destroy a PDF viewer instance
    */
   destroy(options: DestroyOptions): Promise<void>;
@@ -63,6 +78,11 @@ export interface InlinePDFPlugin {
    * Add event listener for zoom changes
    */
   addListener(event: 'zoomChanged', listener: (data: { zoom: number }) => void): Promise<{ remove: () => void }>;
+  
+  /**
+   * Add event listener for overlay actions (link taps, dismissal, etc)
+   */
+  addListener(event: 'overlayAction', listener: (data: OverlayActionEvent) => void): Promise<{ remove: () => void }>;
 }
 
 export interface CreateOptions {
@@ -132,4 +152,58 @@ export interface Rectangle {
   y: number;
   width: number;
   height: number;
+}
+
+// Overlay-related interfaces
+export interface ShowOverlayOptions {
+  viewerId: string;
+  position: 'bottom' | 'top' | 'left' | 'right' | 'center' | 'fullscreen';
+  size?: {
+    width?: string;  // e.g., "300", "50%", "auto"
+    height?: string; // e.g., "400", "60%", "auto"
+  };
+  content: {
+    html?: string;           // Raw HTML to render
+    type?: 'html' | 'native'; // How to interpret content (default: 'html')
+    interceptLinks?: boolean; // Intercept link clicks (default: true)
+    linkPrefix?: string;     // URL prefix to intercept (default: "app://")
+  };
+  style?: {
+    backgroundColor?: string;
+    textColor?: string;
+    padding?: number;
+    borderRadius?: number;
+    opacity?: number;
+    blur?: boolean;        // Blur PDF background
+  };
+  behavior?: {
+    dismissible?: boolean;           // Can user dismiss it? (default: true)
+    dismissOnTapOutside?: boolean;   // Dismiss when tapping outside (default: true)
+    showCloseButton?: boolean;       // Show close button (default: true)
+    animation?: 'slide' | 'fade' | 'none'; // Animation type (default: 'slide')
+  };
+}
+
+export interface HideOverlayOptions {
+  viewerId: string;
+  animation?: boolean; // Animate the dismissal (default: true)
+}
+
+export interface UpdateOverlayOptions {
+  viewerId: string;
+  content: {
+    html?: string;
+    type?: 'html' | 'native';
+  };
+}
+
+export interface OverlayActionEvent {
+  viewerId?: string;
+  action: 'linkTapped' | 'dismissed' | 'buttonPressed' | 'customAction' | 'showMedications';
+  data?: {
+    url?: string;        // For link taps
+    linkId?: string;     // Custom link identifier
+    buttonId?: string;   // For button presses
+    customData?: any;    // Any custom data passed from overlay
+  };
 }

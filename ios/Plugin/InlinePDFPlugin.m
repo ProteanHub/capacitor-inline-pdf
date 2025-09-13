@@ -10,5 +10,8 @@ CAP_PLUGIN(InlinePDFPlugin, "InlinePDF",
   CAP_PLUGIN_METHOD(updateRect, CAPPluginReturnPromise);
   CAP_PLUGIN_METHOD(resetZoom, CAPPluginReturnPromise);
   CAP_PLUGIN_METHOD(clearHighlights, CAPPluginReturnPromise);
+  CAP_PLUGIN_METHOD(showOverlay, CAPPluginReturnPromise);
+  CAP_PLUGIN_METHOD(hideOverlay, CAPPluginReturnPromise);
+  CAP_PLUGIN_METHOD(updateOverlayContent, CAPPluginReturnPromise);
   CAP_PLUGIN_METHOD(destroy, CAPPluginReturnPromise);
 )
