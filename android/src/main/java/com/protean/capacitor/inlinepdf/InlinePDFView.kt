@@ -124,14 +124,29 @@ class InlinePDFView @JvmOverloads constructor(
         scaleGestureDetector = ScaleGestureDetector(context, ScaleListener())
         gestureDetector = GestureDetectorCompat(context, GestureListener())
     }
-    
+
+    override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
+        // Intercept all touch events to prevent parent (WebView) from handling them
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                // Request that parent doesn't intercept touch events
+                parent?.requestDisallowInterceptTouchEvent(true)
+            }
+        }
+        // Always intercept to ensure we handle touches
+        return true
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // Prevent parent from intercepting our touch events
+        parent?.requestDisallowInterceptTouchEvent(true)
+
         var handled = scaleGestureDetector.onTouchEvent(event)
-        
+
         if (!scaleGestureDetector.isInProgress) {
             handled = gestureDetector.onTouchEvent(event) || handled
         }
-        
+
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 lastTouchX = event.x
@@ -141,16 +156,21 @@ class InlinePDFView @JvmOverloads constructor(
                 if (!isScaling) {
                     val dx = event.x - lastTouchX
                     val dy = event.y - lastTouchY
-                    
+
                     scrollView.scrollBy(-dx.toInt(), -dy.toInt())
-                    
+
                     lastTouchX = event.x
                     lastTouchY = event.y
                 }
             }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                // Allow parent to intercept again when we're done
+                parent?.requestDisallowInterceptTouchEvent(false)
+            }
         }
-        
-        return handled || super.onTouchEvent(event)
+
+        // Always return true to consume the event
+        return true
     }
     
     fun loadFromUrl(url: String) {
