@@ -26,7 +26,9 @@ class InlinePDFViewController: UIViewController {
     
     // Native FAB components
     private var fabButton: UIButton?
-    
+    private var fabConstraints: [NSLayoutConstraint] = []
+    private var hasFABBeenPositioned: Bool = false
+
     // Configuration
     var backgroundColor: String?
     var initialScale: CGFloat = 1.0
@@ -50,6 +52,12 @@ class InlinePDFViewController: UIViewController {
     private var overlayConstraints: [NSLayoutConstraint] = []
     weak var plugin: InlinePDFPlugin?
     private var overlayViewerId: String = ""
+
+    // Store overlay configuration for recalculation on orientation change
+    private var overlayPosition: String = "bottom"
+    private var overlaySize: [String: Any]?
+    private var overlayStyle: [String: Any]?
+    private var overlayBehavior: [String: Any]?
     
     override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
         super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
@@ -62,19 +70,130 @@ class InlinePDFViewController: UIViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        
+
         print("InlinePDFViewController: viewDidLoad")
-        
+
         setupPDFView()
         setupGestureRecognizers()
         setupNotifications()
         setupNativeFAB()
-        
+
         // Note: Native search UI on iOS 16+ may appear when tapping PDF
         // This is a known limitation of PDFKit that cannot be fully suppressed
         // without breaking other functionality
-        
+
         print("InlinePDFViewController: viewDidLoad complete")
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+
+        // Recalculate overlay constraints on orientation change
+        guard let webView = overlayWebView, let container = overlayContainer else { return }
+
+        print("InlinePDFViewController: Orientation change detected")
+        print("  - New size: \(size)")
+
+        coordinator.animate(alongsideTransition: { _ in
+            // Deactivate old constraints
+            NSLayoutConstraint.deactivate(self.overlayConstraints)
+
+            // Calculate new constraints based on stored overlay configuration
+            var constraints: [NSLayoutConstraint] = []
+
+            // Container constraints (full screen backdrop)
+            constraints.append(contentsOf: [
+                container.topAnchor.constraint(equalTo: self.view.topAnchor),
+                container.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
+                container.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
+                container.bottomAnchor.constraint(equalTo: self.view.bottomAnchor)
+            ])
+
+            // WebView constraints based on position
+            let position = self.overlayPosition
+            let overlaySize = self.overlaySize
+
+            switch position {
+            case "bottom":
+                let height = overlaySize?["height"] as? String ?? "40%"
+                let heightValue = self.parseSize(height, relativeTo: size.height)
+                constraints.append(contentsOf: [
+                    webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                    webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                    webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+                    webView.heightAnchor.constraint(equalToConstant: heightValue)
+                ])
+
+            case "top":
+                let height = overlaySize?["height"] as? String ?? "40%"
+                let heightValue = self.parseSize(height, relativeTo: size.height)
+                constraints.append(contentsOf: [
+                    webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                    webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                    webView.topAnchor.constraint(equalTo: container.topAnchor),
+                    webView.heightAnchor.constraint(equalToConstant: heightValue)
+                ])
+
+            case "left":
+                let width = overlaySize?["width"] as? String ?? "300"
+                let widthValue = self.parseSize(width, relativeTo: size.width)
+                constraints.append(contentsOf: [
+                    webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                    webView.topAnchor.constraint(equalTo: container.topAnchor),
+                    webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+                    webView.widthAnchor.constraint(equalToConstant: widthValue)
+                ])
+
+            case "right":
+                let width = overlaySize?["width"] as? String ?? "300"
+                let widthValue = self.parseSize(width, relativeTo: size.width)
+                constraints.append(contentsOf: [
+                    webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                    webView.topAnchor.constraint(equalTo: container.topAnchor),
+                    webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+                    webView.widthAnchor.constraint(equalToConstant: widthValue)
+                ])
+
+            case "center":
+                let width = overlaySize?["width"] as? String ?? "80%"
+                let height = overlaySize?["height"] as? String ?? "60%"
+                let widthValue = self.parseSize(width, relativeTo: size.width)
+                let heightValue = self.parseSize(height, relativeTo: size.height)
+                constraints.append(contentsOf: [
+                    webView.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+                    webView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                    webView.widthAnchor.constraint(equalToConstant: widthValue),
+                    webView.heightAnchor.constraint(equalToConstant: heightValue)
+                ])
+
+            case "fullscreen":
+                constraints.append(contentsOf: [
+                    webView.topAnchor.constraint(equalTo: container.topAnchor),
+                    webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                    webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                    webView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+                ])
+
+            default:
+                // Default to bottom
+                let heightValue = size.height * 0.4
+                constraints.append(contentsOf: [
+                    webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                    webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                    webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+                    webView.heightAnchor.constraint(equalToConstant: heightValue)
+                ])
+            }
+
+            // Activate new constraints
+            NSLayoutConstraint.activate(constraints)
+            self.overlayConstraints = constraints
+
+            // Force layout
+            self.view.layoutIfNeeded()
+
+            print("InlinePDFViewController: Overlay constraints updated for new orientation")
+        }, completion: nil)
     }
     
     private func setupPDFView() {
@@ -162,7 +281,7 @@ class InlinePDFViewController: UIViewController {
     
     private func setupNativeFAB() {
         print("InlinePDFViewController: setupNativeFAB start")
-        
+
         // Create main FAB button - now with medication icon and direct action
         fabButton = UIButton(type: .system)
         fabButton?.translatesAutoresizingMaskIntoConstraints = false
@@ -175,18 +294,42 @@ class InlinePDFViewController: UIViewController {
         fabButton?.layer.shadowOpacity = 0.3
         fabButton?.layer.shadowRadius = 4
         fabButton?.addTarget(self, action: #selector(fabButtonTapped), for: .touchUpInside)
-        
+
+        // Hide initially to prevent visible jumping - will show after constraints are set
+        fabButton?.alpha = 0
+
         if let fabBtn = fabButton {
             view.addSubview(fabBtn)
-            NSLayoutConstraint.activate([
+            // Store constraints but don't activate yet - wait for viewDidLayoutSubviews
+            // This prevents FAB jumping when safe area is calculated
+            fabConstraints = [
                 fabBtn.widthAnchor.constraint(equalToConstant: 56),
                 fabBtn.heightAnchor.constraint(equalToConstant: 56),
                 fabBtn.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
                 fabBtn.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20)
-            ])
+            ]
         }
-        
-        print("InlinePDFViewController: Native FAB setup complete")
+
+        print("InlinePDFViewController: Native FAB created (hidden, will position in viewDidLayoutSubviews)")
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+
+        // Activate FAB constraints after safe area is properly calculated
+        // This prevents the FAB from jumping positions during PDF load
+        if !hasFABBeenPositioned && !fabConstraints.isEmpty {
+            print("InlinePDFViewController: Activating FAB constraints with proper safe area")
+            NSLayoutConstraint.activate(fabConstraints)
+
+            // Fade in FAB smoothly now that it's properly positioned
+            UIView.animate(withDuration: 0.3, delay: 0.1, options: .curveEaseOut) {
+                self.fabButton?.alpha = 1.0
+            }
+
+            hasFABBeenPositioned = true
+            print("InlinePDFViewController: FAB positioned and visible")
+        }
     }
     
     @objc private func fabButtonTapped() {
@@ -237,10 +380,29 @@ class InlinePDFViewController: UIViewController {
                 print("InlinePDFViewController: PDF document loaded, page count: \(document.pageCount)")
                 DispatchQueue.main.async {
                     self?.pdfView.document = document
-                    self?.pdfView.scaleFactor = self?.initialScale ?? 1.0
+
+                    // Implement fit-to-page on initial load
+                    // Use a small delay to ensure the view has properly laid out
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        if self?.pdfView.autoScales == true {
+                            // autoScales is already set, just trigger a layout update
+                            self?.pdfView.scaleFactor = self?.pdfView.scaleFactorForSizeToFit ?? 1.0
+                            print("InlinePDFViewController: Applied fit-to-page scale factor: \(self?.pdfView.scaleFactor ?? 1.0)")
+                        } else {
+                            // Fallback: manually calculate scale to fit width
+                            if let firstPage = document.page(at: 0) {
+                                let pageRect = firstPage.bounds(for: .mediaBox)
+                                let viewWidth = self?.pdfView.bounds.width ?? 1.0
+                                let scale = viewWidth / pageRect.width
+                                self?.pdfView.scaleFactor = scale
+                                print("InlinePDFViewController: Applied calculated scale factor: \(scale)")
+                            }
+                        }
+                    }
+
                     self?.isLoading = false
-                    print("InlinePDFViewController: PDF set in view")
-                    
+                    print("InlinePDFViewController: PDF set in view with fit-to-page")
+
                     // Skip scroll view configuration - PDFView defaults work perfectly
                     print("InlinePDFViewController: Using PDFView default scroll behavior (no custom configuration needed)")
                 }
@@ -403,10 +565,20 @@ extension InlinePDFViewController {
         print("  - Position: \(position)")
         print("  - Size: \(String(describing: size))")
         print("  - HTML length: \(html.count) characters")
-        
+
         self.plugin = plugin
         self.overlayViewerId = UUID().uuidString
-        
+
+        // Store overlay configuration for recalculation on orientation change
+        self.overlayPosition = position
+        self.overlaySize = size
+        self.overlayStyle = style
+        self.overlayBehavior = behavior
+
+        // Hide FAB button when overlay is shown
+        fabButton?.isHidden = true
+        print("InlinePDFViewController: FAB button hidden")
+
         // Remove existing overlay if present
         hideOverlay(animated: false)
         
@@ -577,7 +749,7 @@ extension InlinePDFViewController {
     
     func hideOverlay(animated: Bool) {
         guard let container = overlayContainer, let webView = overlayWebView else { return }
-        
+
         if animated {
             UIView.animate(withDuration: 0.3, animations: {
                 container.alpha = 0
@@ -588,7 +760,11 @@ extension InlinePDFViewController {
                 self.overlayWebView = nil
                 NSLayoutConstraint.deactivate(self.overlayConstraints)
                 self.overlayConstraints = []
-                
+
+                // Show FAB button again when overlay is hidden
+                self.fabButton?.isHidden = false
+                print("InlinePDFViewController: FAB button shown after overlay dismissed")
+
                 // Notify listener
                 self.plugin?.notifyListeners("overlayAction", data: [
                     "viewerId": self.overlayViewerId,
@@ -601,6 +777,10 @@ extension InlinePDFViewController {
             self.overlayWebView = nil
             NSLayoutConstraint.deactivate(self.overlayConstraints)
             self.overlayConstraints = []
+
+            // Show FAB button again when overlay is hidden
+            self.fabButton?.isHidden = false
+            print("InlinePDFViewController: FAB button shown after overlay hidden (no animation)")
         }
     }
     
