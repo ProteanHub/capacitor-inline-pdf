@@ -4,6 +4,7 @@ import android.graphics.Color
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.coordinatorlayout.widget.CoordinatorLayout
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -39,11 +40,16 @@ class InlinePDFPlugin : Plugin() {
             try {
                 // Create PDF view
                 val pdfView = InlinePDFView(context).apply {
-                    layoutParams = FrameLayout.LayoutParams(width, height).apply {
+                    layoutParams = CoordinatorLayout.LayoutParams(width, height).apply {
                         leftMargin = x.toInt()
                         topMargin = y.toInt()
                     }
-                    
+
+                    // CRITICAL: Enable touch event handling
+                    isClickable = true
+                    isFocusable = true
+                    isFocusableInTouchMode = true
+
                     // Set background color if specified
                     call.getString("backgroundColor")?.let { bgColor ->
                         try {
@@ -52,7 +58,7 @@ class InlinePDFPlugin : Plugin() {
                             // Ignore invalid color
                         }
                     }
-                    
+
                     // Set initial scale if specified
                     call.getFloat("initialScale")?.let { scale ->
                         initialScale = scale
@@ -83,14 +89,17 @@ class InlinePDFPlugin : Plugin() {
                 // Add to web view container
                 val webView = bridge.webView
                 val parent = webView.parent as? ViewGroup
-                
+
                 if (parent != null) {
                     parent.addView(pdfView)
+                    // Bring PDF view to front to ensure it receives touch events
+                    pdfView.bringToFront()
                 } else {
                     // If parent is null, add directly to activity's content view
                     activity.addContentView(pdfView, pdfView.layoutParams)
+                    pdfView.bringToFront()
                 }
-                
+
                 pdfViews[viewerId] = pdfView
                 
                 call.resolve(JSObject().apply {
@@ -265,7 +274,7 @@ class InlinePDFPlugin : Plugin() {
         
         activity.runOnUiThread {
             try {
-                pdfView.layoutParams = FrameLayout.LayoutParams(width, height).apply {
+                pdfView.layoutParams = CoordinatorLayout.LayoutParams(width, height).apply {
                     leftMargin = x.toInt()
                     topMargin = y.toInt()
                 }
