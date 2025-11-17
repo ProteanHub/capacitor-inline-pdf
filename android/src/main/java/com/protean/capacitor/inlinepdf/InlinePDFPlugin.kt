@@ -16,7 +16,38 @@ import java.util.UUID
 @CapacitorPlugin(name = "InlinePDF")
 class InlinePDFPlugin : Plugin() {
     private val pdfViews = mutableMapOf<String, InlinePDFView>()
-    
+
+    override fun load() {
+        super.load()
+        // Clean up any orphaned PDF views from previous app sessions
+        // This prevents views from persisting when the app is killed and restarted
+        activity.runOnUiThread {
+            try {
+                val webView = bridge.webView
+                val parent = webView.parent as? ViewGroup
+                parent?.let {
+                    // Find and remove any InlinePDFView instances that might be lingering
+                    val childrenToRemove = mutableListOf<View>()
+                    for (i in 0 until it.childCount) {
+                        val child = it.getChildAt(i)
+                        if (child is InlinePDFView) {
+                            childrenToRemove.add(child)
+                        }
+                    }
+                    childrenToRemove.forEach { child ->
+                        (child as InlinePDFView).cleanup()
+                        it.removeView(child)
+                    }
+                    if (childrenToRemove.isNotEmpty()) {
+                        android.util.Log.d("InlinePDFPlugin", "Cleaned up ${childrenToRemove.size} orphaned PDF view(s) on plugin load")
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("InlinePDFPlugin", "Error cleaning up orphaned views on load", e)
+            }
+        }
+    }
+
     @PluginMethod
     fun create(call: PluginCall) {
         val containerId = call.getString("containerId") ?: run {
