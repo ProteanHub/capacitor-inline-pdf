@@ -61,7 +61,7 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "com.google.android.material:material:$materialVersion"
     implementation 'androidx.core:core-ktx:1.12.0'
-    implementation 'org.jetbrens.kotlin:kotlin-stdlib:1.9.22'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.22'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 
     testImplementation "junit:junit:$junitVersion"
