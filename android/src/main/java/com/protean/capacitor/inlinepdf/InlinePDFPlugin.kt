@@ -292,14 +292,16 @@ class InlinePDFPlugin : Plugin() {
             call.reject("Missing viewerId")
             return
         }
-        
+
         val pdfView = pdfViews[viewerId] ?: run {
             call.reject("Invalid viewer ID")
             return
         }
-        
+
         activity.runOnUiThread {
             try {
+                // Hide overlay before destroying
+                pdfView.hideOverlay()
                 (pdfView.parent as? ViewGroup)?.removeView(pdfView)
                 pdfView.cleanup()
                 pdfViews.remove(viewerId)
@@ -309,11 +311,118 @@ class InlinePDFPlugin : Plugin() {
             }
         }
     }
-    
+
+    @PluginMethod
+    fun showOverlay(call: PluginCall) {
+        val viewerId = call.getString("viewerId") ?: run {
+            call.reject("Missing viewerId")
+            return
+        }
+
+        val pdfView = pdfViews[viewerId] ?: run {
+            call.reject("Invalid viewer ID")
+            return
+        }
+
+        val position = call.getString("position") ?: run {
+            call.reject("Missing position parameter")
+            return
+        }
+
+        val content = call.getObject("content") ?: run {
+            call.reject("Missing content")
+            return
+        }
+
+        val html = content.getString("html") ?: run {
+            call.reject("Missing HTML content")
+            return
+        }
+
+        val size = call.getObject("size")
+        val style = call.getObject("style")
+        val behavior = call.getObject("behavior")
+
+        activity.runOnUiThread {
+            try {
+                pdfView.showOverlay(html, position, size, style, behavior, this)
+                call.resolve()
+            } catch (e: Exception) {
+                call.reject("Failed to show overlay", e)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun hideOverlay(call: PluginCall) {
+        val viewerId = call.getString("viewerId") ?: run {
+            call.reject("Missing viewerId")
+            return
+        }
+
+        val pdfView = pdfViews[viewerId] ?: run {
+            call.reject("Invalid viewer ID")
+            return
+        }
+
+        val animated = call.getBoolean("animation", true) ?: true
+
+        activity.runOnUiThread {
+            try {
+                pdfView.hideOverlay(animated)
+                call.resolve()
+            } catch (e: Exception) {
+                call.reject("Failed to hide overlay", e)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun updateOverlayContent(call: PluginCall) {
+        val viewerId = call.getString("viewerId") ?: run {
+            call.reject("Missing viewerId")
+            return
+        }
+
+        val pdfView = pdfViews[viewerId] ?: run {
+            call.reject("Invalid viewer ID")
+            return
+        }
+
+        val content = call.getObject("content") ?: run {
+            call.reject("Missing content")
+            return
+        }
+
+        val html = content.getString("html") ?: run {
+            call.reject("Missing HTML content")
+            return
+        }
+
+        activity.runOnUiThread {
+            try {
+                pdfView.updateOverlayContent(html)
+                call.resolve()
+            } catch (e: Exception) {
+                call.reject("Failed to update overlay content", e)
+            }
+        }
+    }
+
+    // Public method to send overlay actions from native overlay
+    fun sendOverlayAction(action: String, data: JSObject) {
+        val eventData = JSObject().apply {
+            put("action", action)
+            put("data", data)
+        }
+        notifyListeners("overlayAction", eventData)
+    }
+
     override fun handleOnDestroy() {
         super.handleOnDestroy()
         // Clean up all PDF views
         pdfViews.values.forEach { pdfView ->
+            pdfView.hideOverlay()
             (pdfView.parent as? ViewGroup)?.removeView(pdfView)
             pdfView.cleanup()
         }

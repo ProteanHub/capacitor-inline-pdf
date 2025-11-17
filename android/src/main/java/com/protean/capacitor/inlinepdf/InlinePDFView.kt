@@ -1,19 +1,27 @@
 package com.protean.capacitor.inlinepdf
 
+import android.animation.ObjectAnimator
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import android.util.AttributeSet
+import android.view.Gravity
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ScrollView
 import androidx.core.view.GestureDetectorCompat
+import com.getcapacitor.JSObject
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import kotlinx.coroutines.*
 import java.io.File
 import java.net.URL
@@ -67,7 +75,19 @@ class InlinePDFView @JvmOverloads constructor(
     var onGestureEnd: (() -> Unit)? = null
     var onPageChanged: ((Int) -> Unit)? = null
     var onZoomChanged: ((Float) -> Unit)? = null
-    
+
+    // Overlay components
+    private var overlayContainer: FrameLayout? = null
+    private var overlayWebView: WebView? = null
+    private var fabButton: FloatingActionButton? = null
+    private var plugin: InlinePDFPlugin? = null
+
+    // Overlay configuration (store for recalculation on orientation change)
+    private var overlayPosition: String = "bottom"
+    private var overlaySize: JSObject? = null
+    private var overlayStyle: JSObject? = null
+    private var overlayBehavior: JSObject? = null
+
     // Loading state
     private var isLoading = true
     private val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -243,9 +263,103 @@ class InlinePDFView @JvmOverloads constructor(
             isLoading = isLoading
         )
     }
-    
+
+    fun showOverlay(html: String, position: String, size: JSObject?, style: JSObject?, behavior: JSObject?, plugin: InlinePDFPlugin) {
+        this.plugin = plugin
+        this.overlayPosition = position
+        this.overlaySize = size
+        this.overlayStyle = style
+        this.overlayBehavior = behavior
+
+        // Hide FAB when overlay is shown
+        fabButton?.visibility = View.GONE
+
+        // Remove existing overlay if present
+        hideOverlay(animated = false)
+
+        // Create overlay container
+        overlayContainer = FrameLayout(context).apply {
+            setBackgroundColor(Color.parseColor(style?.getString("backgroundColor") ?: "#FFFFFF"))
+        }
+
+        // Create WebView for HTML content
+        overlayWebView = WebView(context).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            webViewClient = WebViewClient()
+            loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+        }
+
+        // Add WebView to overlay container
+        overlayContainer?.addView(overlayWebView, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+
+        // Calculate overlay dimensions
+        val overlayHeight = when (size?.getString("height")) {
+            "full" -> ViewGroup.LayoutParams.MATCH_PARENT
+            else -> (size?.getInteger("height") ?: 350).dpToPx()
+        }
+
+        val overlayWidth = when (size?.getString("width")) {
+            "full" -> ViewGroup.LayoutParams.MATCH_PARENT
+            else -> ViewGroup.LayoutParams.MATCH_PARENT
+        }
+
+        // Position overlay
+        val layoutParams = FrameLayout.LayoutParams(overlayWidth, overlayHeight).apply {
+            gravity = when (position) {
+                "top" -> Gravity.TOP
+                "bottom" -> Gravity.BOTTOM
+                "left" -> Gravity.START
+                "right" -> Gravity.END
+                else -> Gravity.BOTTOM
+            }
+        }
+
+        // Add overlay to parent
+        addView(overlayContainer, layoutParams)
+
+        // Animate in
+        overlayContainer?.alpha = 0f
+        overlayContainer?.animate()?.alpha(1f)?.setDuration(300)?.start()
+    }
+
+    fun hideOverlay(animated: Boolean = true) {
+        overlayContainer?.let { container ->
+            if (animated) {
+                container.animate()
+                    .alpha(0f)
+                    .setDuration(300)
+                    .withEndAction {
+                        removeView(container)
+                        overlayContainer = null
+                        overlayWebView = null
+                    }
+                    .start()
+            } else {
+                removeView(container)
+                overlayContainer = null
+                overlayWebView = null
+            }
+        }
+
+        // Show FAB again
+        fabButton?.visibility = View.VISIBLE
+    }
+
+    fun updateOverlayContent(html: String) {
+        overlayWebView?.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+    }
+
+    private fun Int.dpToPx(): Int {
+        return (this * context.resources.displayMetrics.density).toInt()
+    }
+
     fun cleanup() {
         coroutineScope.cancel()
+        hideOverlay(animated = false)
         currentPage?.close()
         pdfRenderer?.close()
     }
