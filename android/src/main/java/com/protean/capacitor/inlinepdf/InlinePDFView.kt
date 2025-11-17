@@ -56,7 +56,8 @@ class InlinePDFView @JvmOverloads constructor(
     private var currentPage: PdfRenderer.Page? = null
     private var currentPageIndex = 0
     private var totalPages = 0
-    
+    private var lastNotifiedPageIndex = -1  // Track last page we notified about
+
     // Gesture detection
     private val scaleGestureDetector: ScaleGestureDetector
     private val gestureDetector: GestureDetectorCompat
@@ -247,11 +248,15 @@ class InlinePDFView @JvmOverloads constructor(
             page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
             
             imageView.setImageBitmap(bitmap)
-            
+
             // Update content container size
             contentContainer.layoutParams = FrameLayout.LayoutParams(width, height)
-            
-            onPageChanged?.invoke(currentPageIndex + 1)
+
+            // Only notify if the page index actually changed (not just re-rendering at different scale)
+            if (currentPageIndex != lastNotifiedPageIndex) {
+                onPageChanged?.invoke(currentPageIndex + 1)
+                lastNotifiedPageIndex = currentPageIndex
+            }
         }
     }
     
