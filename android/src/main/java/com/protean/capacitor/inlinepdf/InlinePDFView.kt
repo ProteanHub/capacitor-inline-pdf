@@ -20,6 +20,8 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ScrollView
 import androidx.core.view.GestureDetectorCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.getcapacitor.JSObject
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import kotlinx.coroutines.*
@@ -47,30 +49,26 @@ class InlinePDFView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
-    
-    private val scrollView: ScrollView
-    private val contentContainer: FrameLayout
-    private val imageView: ImageView
-    
+
+    private val recyclerView: RecyclerView
+    private var pdfAdapter: PDFPageAdapter? = null
+
     private var pdfRenderer: PdfRenderer? = null
-    private var currentPage: PdfRenderer.Page? = null
     private var currentPageIndex = 0
     private var totalPages = 0
-    private var lastNotifiedPageIndex = -1  // Track last page we notified about
+    private var lastNotifiedPageIndex = -1
 
-    // Gesture detection
+    // Gesture detection for global zoom
     private val scaleGestureDetector: ScaleGestureDetector
     private val gestureDetector: GestureDetectorCompat
-    
-    // Scale and pan
+
+    // Global scale across all pages
     private var scaleFactor = 1.0f
     var initialScale = 1.0f
-    private var focusX = 0f
-    private var focusY = 0f
-    private var lastTouchX = 0f
-    private var lastTouchY = 0f
     private var isScaling = false
-    
+    private var baseScaleFactor = 1.0f  // Track the scale at the start of gesture
+    private var pointerCount = 0  // Track number of active pointers
+
     // Callbacks
     var onGestureStart: (() -> Unit)? = null
     var onGestureEnd: (() -> Unit)? = null
@@ -83,7 +81,7 @@ class InlinePDFView @JvmOverloads constructor(
     private var fabButton: FloatingActionButton? = null
     private var plugin: InlinePDFPlugin? = null
 
-    // Overlay configuration (store for recalculation on orientation change)
+    // Overlay configuration
     private var overlayPosition: String = "bottom"
     private var overlaySize: JSObject? = null
     private var overlayStyle: JSObject? = null
@@ -92,92 +90,83 @@ class InlinePDFView @JvmOverloads constructor(
     // Loading state
     private var isLoading = true
     private val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    
+
     init {
-        // Set up scroll view
-        scrollView = ScrollView(context).apply {
-            isFillViewport = true
-            isHorizontalScrollBarEnabled = false
-            isVerticalScrollBarEnabled = true
+        // Set up RecyclerView for efficient page rendering
+        recyclerView = RecyclerView(context).apply {
+            layoutManager = LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false)
+            setHasFixedSize(false)
+            itemAnimator = null // Disable animations for better performance
+
+            // Allow child views (ZoomableImageView) to intercept touch events
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         }
-        
-        // Set up content container
-        contentContainer = FrameLayout(context)
-        
-        // Set up image view for PDF rendering
-        imageView = ImageView(context).apply {
-            scaleType = ImageView.ScaleType.MATRIX
-            setLayerType(View.LAYER_TYPE_HARDWARE, null)
-        }
-        
-        // Add views to hierarchy
-        contentContainer.addView(imageView, LayoutParams(
+
+        addView(recyclerView, LayoutParams(
             LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT
         ))
-        scrollView.addView(contentContainer)
-        addView(scrollView, LayoutParams(
-            LayoutParams.MATCH_PARENT,
-            LayoutParams.MATCH_PARENT
-        ))
-        
-        // Set up gesture detectors
+
+        // Set up scroll listener to track current page
+        recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                updateCurrentPageFromScroll()
+            }
+        })
+
+        // Set up gesture detectors for global zoom
         scaleGestureDetector = ScaleGestureDetector(context, ScaleListener())
         gestureDetector = GestureDetectorCompat(context, GestureListener())
-    }
 
-    override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
-        // Intercept all touch events to prevent parent (WebView) from handling them
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
-                // Request that parent doesn't intercept touch events
-                parent?.requestDisallowInterceptTouchEvent(true)
-            }
-        }
-        // Always intercept to ensure we handle touches
-        return true
-    }
-
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        // Prevent parent from intercepting our touch events
-        parent?.requestDisallowInterceptTouchEvent(true)
-
-        var handled = scaleGestureDetector.onTouchEvent(event)
-
-        if (!scaleGestureDetector.isInProgress) {
-            handled = gestureDetector.onTouchEvent(event) || handled
-        }
-
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
-                lastTouchX = event.x
-                lastTouchY = event.y
-            }
-            MotionEvent.ACTION_MOVE -> {
-                if (!isScaling) {
-                    val dx = event.x - lastTouchX
-                    val dy = event.y - lastTouchY
-
-                    scrollView.scrollBy(-dx.toInt(), -dy.toInt())
-
-                    lastTouchX = event.x
-                    lastTouchY = event.y
+        // Intercept touch events for global zoom
+        recyclerView.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
+                // Track pointer count for early multi-touch detection
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_POINTER_DOWN -> {
+                        pointerCount = e.pointerCount
+                        // Start intercepting as soon as we detect two fingers
+                        if (pointerCount >= 2) {
+                            isScaling = true
+                        }
+                    }
+                    MotionEvent.ACTION_POINTER_UP -> {
+                        pointerCount = e.pointerCount - 1
+                        // Reset visual scale when finger is lifted
+                        if (pointerCount < 2) {
+                            recyclerView.post {
+                                recyclerView.scaleX = 1.0f
+                                recyclerView.scaleY = 1.0f
+                            }
+                        }
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        pointerCount = 0
+                        isScaling = false
+                        // Ensure visual scale is reset
+                        recyclerView.post {
+                            recyclerView.scaleX = 1.0f
+                            recyclerView.scaleY = 1.0f
+                        }
+                    }
                 }
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                // Allow parent to intercept again when we're done
-                parent?.requestDisallowInterceptTouchEvent(false)
-            }
-        }
 
-        // Always return true to consume the event
-        return true
+                scaleGestureDetector.onTouchEvent(e)
+                // Intercept if we have multiple pointers or are already scaling
+                return pointerCount >= 2 || isScaling
+            }
+
+            override fun onTouchEvent(rv: RecyclerView, e: MotionEvent) {
+                scaleGestureDetector.onTouchEvent(e)
+            }
+        })
     }
-    
+
     fun loadFromUrl(url: String) {
         coroutineScope.launch {
             isLoading = true
-            
+
             withContext(Dispatchers.IO) {
                 try {
                     // Download PDF to temporary file
@@ -187,7 +176,7 @@ class InlinePDFView @JvmOverloads constructor(
                             input.copyTo(output)
                         }
                     }
-                    
+
                     withContext(Dispatchers.Main) {
                         loadFromPath(tempFile.absolutePath)
                     }
@@ -198,88 +187,80 @@ class InlinePDFView @JvmOverloads constructor(
             }
         }
     }
-    
+
     fun loadFromPath(path: String) {
         try {
             val file = File(path)
             val fileDescriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-            
+
             pdfRenderer?.close()
             pdfRenderer = PdfRenderer(fileDescriptor)
-            
+
             totalPages = pdfRenderer?.pageCount ?: 0
-            
+
             if (totalPages > 0) {
-                renderPage(0)
+                pdfAdapter = PDFPageAdapter(pdfRenderer!!, scaleFactor, initialScale)
+                recyclerView.adapter = pdfAdapter
+                currentPageIndex = 0
+                onPageChanged?.invoke(1) // Notify that we're on page 1
             }
-            
+
             isLoading = false
         } catch (e: Exception) {
             e.printStackTrace()
             isLoading = false
         }
     }
-    
-    private fun renderPage(pageIndex: Int) {
-        if (pageIndex < 0 || pageIndex >= totalPages) return
-        
-        currentPage?.close()
-        
-        pdfRenderer?.let { renderer ->
-            currentPage = renderer.openPage(pageIndex)
-            currentPageIndex = pageIndex
-            
-            val page = currentPage!!
-            val width = (page.width * scaleFactor * initialScale).toInt()
-            val height = (page.height * scaleFactor * initialScale).toInt()
-            
-            val bitmap = android.graphics.Bitmap.createBitmap(
-                width,
-                height,
-                android.graphics.Bitmap.Config.ARGB_8888
-            )
-            
-            val canvas = Canvas(bitmap)
-            canvas.drawColor(android.graphics.Color.WHITE)
-            
-            val matrix = android.graphics.Matrix()
-            matrix.setScale(scaleFactor * initialScale, scaleFactor * initialScale)
-            
-            page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            
-            imageView.setImageBitmap(bitmap)
 
-            // Update content container size
-            contentContainer.layoutParams = FrameLayout.LayoutParams(width, height)
+    private fun updateCurrentPageFromScroll() {
+        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+        val firstVisiblePosition = layoutManager.findFirstVisibleItemPosition()
+        val lastVisiblePosition = layoutManager.findLastVisibleItemPosition()
 
-            // Only notify if the page index actually changed (not just re-rendering at different scale)
+        if (firstVisiblePosition == RecyclerView.NO_POSITION) return
+
+        // Find the most visible page
+        var mostVisiblePage = firstVisiblePosition
+        var maxVisibleArea = 0
+
+        for (i in firstVisiblePosition..lastVisiblePosition) {
+            val view = layoutManager.findViewByPosition(i) ?: continue
+            val rect = Rect()
+            view.getLocalVisibleRect(rect)
+            val visibleArea = rect.width() * rect.height()
+
+            if (visibleArea > maxVisibleArea) {
+                maxVisibleArea = visibleArea
+                mostVisiblePage = i
+            }
+        }
+
+        if (mostVisiblePage != currentPageIndex) {
+            currentPageIndex = mostVisiblePage
             if (currentPageIndex != lastNotifiedPageIndex) {
                 onPageChanged?.invoke(currentPageIndex + 1)
                 lastNotifiedPageIndex = currentPageIndex
             }
         }
     }
-    
+
     fun search(query: String, caseSensitive: Boolean, wholeWords: Boolean): List<SearchResult> {
         // Note: Android's PdfRenderer doesn't support text extraction
-        // This would require a third-party library like PDFBox-Android or similar
-        // For now, returning empty results
         return emptyList()
     }
-    
+
     fun goToPage(pageNumber: Int, animated: Boolean) {
         val pageIndex = pageNumber - 1
         if (pageIndex >= 0 && pageIndex < totalPages) {
-            renderPage(pageIndex)
-            
             if (animated) {
-                scrollView.smoothScrollTo(0, 0)
+                recyclerView.smoothScrollToPosition(pageIndex)
             } else {
-                scrollView.scrollTo(0, 0)
+                recyclerView.scrollToPosition(pageIndex)
             }
+            currentPageIndex = pageIndex
         }
     }
-    
+
     fun getState(): PDFState {
         return PDFState(
             currentPage = currentPageIndex + 1,
@@ -385,76 +366,207 @@ class InlinePDFView @JvmOverloads constructor(
     fun cleanup() {
         coroutineScope.cancel()
         hideOverlay(animated = false)
-        currentPage?.close()
+        pdfAdapter?.cleanup()
+        pdfAdapter = null
+        recyclerView.adapter = null
         pdfRenderer?.close()
+        pdfRenderer = null
     }
-    
+
     private inner class ScaleListener : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+            // Only allow zoom with 2+ fingers
+            if (pointerCount < 2) {
+                return false
+            }
+
             isScaling = true
-            focusX = detector.focusX
-            focusY = detector.focusY
+            baseScaleFactor = scaleFactor
             onGestureStart?.invoke()
             return true
         }
-        
+
         override fun onScale(detector: ScaleGestureDetector): Boolean {
-            val oldScaleFactor = scaleFactor
-            scaleFactor *= detector.scaleFactor
-            scaleFactor = scaleFactor.coerceIn(0.5f, 5.0f)
-            
-            if (oldScaleFactor != scaleFactor) {
-                // Re-render at new scale
-                renderPage(currentPageIndex)
-                
-                // Adjust scroll position to maintain focus point
-                val scrollX = scrollView.scrollX
-                val scrollY = scrollView.scrollY
-                
-                val newScrollX = ((scrollX + focusX) * scaleFactor / oldScaleFactor - focusX).toInt()
-                val newScrollY = ((scrollY + focusY) * scaleFactor / oldScaleFactor - focusY).toInt()
-                
-                scrollView.scrollTo(
-                    max(0, min(newScrollX, contentContainer.width - scrollView.width)),
-                    max(0, min(newScrollY, contentContainer.height - scrollView.height))
-                )
+            // Double-check we still have 2+ fingers
+            if (pointerCount < 2) {
+                return false
             }
-            
+
+            val newScaleFactor = (scaleFactor * detector.scaleFactor).coerceIn(0.5f, 4.0f)
+
+            if (kotlin.math.abs(newScaleFactor - scaleFactor) > 0.01f) {
+                scaleFactor = newScaleFactor
+
+                // Apply real-time visual scaling to RecyclerView
+                // This gives immediate visual feedback without re-rendering
+                val visualScale = scaleFactor / baseScaleFactor
+                recyclerView.scaleX = visualScale
+                recyclerView.scaleY = visualScale
+
+                // Re-rendering during pinch causes lag and crashes, so we just scale the view
+                onZoomChanged?.invoke(scaleFactor)
+            }
+
             return true
         }
-        
+
         override fun onScaleEnd(detector: ScaleGestureDetector) {
             isScaling = false
+            pointerCount = 0  // Reset pointer count
+
+            // Reset visual scale to 1.0 before re-rendering
+            recyclerView.scaleX = 1.0f
+            recyclerView.scaleY = 1.0f
+
+            // NOW trigger re-render at final zoom level with proper bitmap sizes
+            pdfAdapter?.updateZoom(scaleFactor)
+
             onGestureEnd?.invoke()
-            onZoomChanged?.invoke(scaleFactor)
         }
     }
-    
+
     private inner class GestureListener : GestureDetector.SimpleOnGestureListener() {
-        override fun onDoubleTap(e: MotionEvent): Boolean {
-            // Toggle between 1x and 2x zoom
-            val targetScale = if (scaleFactor > 1.5f) 1.0f else 2.0f
-            val oldScaleFactor = scaleFactor
-            scaleFactor = targetScale
-            
-            // Re-render at new scale
-            renderPage(currentPageIndex)
-            
-            // Center on tap point
-            val scrollX = scrollView.scrollX
-            val scrollY = scrollView.scrollY
-            
-            val newScrollX = ((scrollX + e.x) * scaleFactor / oldScaleFactor - e.x).toInt()
-            val newScrollY = ((scrollY + e.y) * scaleFactor / oldScaleFactor - e.y).toInt()
-            
-            scrollView.smoothScrollTo(
-                max(0, min(newScrollX, contentContainer.width - scrollView.width)),
-                max(0, min(newScrollY, contentContainer.height - scrollView.height))
-            )
-            
-            onZoomChanged?.invoke(scaleFactor)
-            
-            return true
+        // Could add double-tap zoom here if needed
+    }
+
+    // RecyclerView Adapter for PDF pages
+    private class PDFPageAdapter(
+        private val pdfRenderer: PdfRenderer,
+        private var scaleFactor: Float,
+        private var initialScale: Float
+    ) : RecyclerView.Adapter<PDFPageViewHolder>() {
+
+        private val bitmapCache = java.util.concurrent.ConcurrentHashMap<Int, android.graphics.Bitmap>()
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PDFPageViewHolder {
+            // Use ZoomableImageView for pan support when zoomed
+            // Disable its zoom capability - we use global zoom at RecyclerView level
+            val imageView = ZoomableImageView(parent.context).apply {
+                zoomEnabled = false  // Disable pinch zoom, but keep pan
+                setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                layoutParams = RecyclerView.LayoutParams(
+                    RecyclerView.LayoutParams.MATCH_PARENT,
+                    RecyclerView.LayoutParams.WRAP_CONTENT
+                )
+            }
+            return PDFPageViewHolder(imageView)
+        }
+
+        override fun onBindViewHolder(holder: PDFPageViewHolder, position: Int) {
+            // Disable ZoomableImageView's zoom capability - we use global zoom instead
+            // Reset zoom to allow panning of the pre-rendered bitmap
+            holder.imageView.resetZoom()
+
+            // Check cache first
+            val cachedBitmap = bitmapCache[position]
+            if (cachedBitmap != null && !cachedBitmap.isRecycled) {
+                holder.imageView.setImageBitmap(cachedBitmap)
+                // Keep width at MATCH_PARENT to allow horizontal panning
+                // Set height to match bitmap height for proper vertical layout
+                val params = holder.imageView.layoutParams as? RecyclerView.LayoutParams
+                    ?: RecyclerView.LayoutParams(RecyclerView.LayoutParams.MATCH_PARENT, cachedBitmap.height)
+                params.width = RecyclerView.LayoutParams.MATCH_PARENT
+                params.height = cachedBitmap.height
+                holder.imageView.layoutParams = params
+                return
+            }
+
+            // Show placeholder while rendering
+            holder.imageView.setImageBitmap(null)
+
+            // Render page asynchronously to avoid blocking UI
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val bitmap = renderPage(position)
+
+                    withContext(Dispatchers.Main) {
+                        // Only set bitmap if this ViewHolder is still showing this position
+                        if (holder.adapterPosition == position) {
+                            holder.imageView.setImageBitmap(bitmap)
+                            // Keep width at MATCH_PARENT to allow horizontal panning
+                            // Set height to match bitmap height so RecyclerView allocates correct vertical space
+                            val params = holder.imageView.layoutParams as? RecyclerView.LayoutParams
+                                ?: RecyclerView.LayoutParams(RecyclerView.LayoutParams.MATCH_PARENT, bitmap.height)
+                            params.width = RecyclerView.LayoutParams.MATCH_PARENT
+                            params.height = bitmap.height
+                            holder.imageView.layoutParams = params
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("PDFPageAdapter", "Error rendering page $position", e)
+                }
+            }
+        }
+
+        private fun renderPage(position: Int): android.graphics.Bitmap {
+            // Synchronize access to pdfRenderer
+            synchronized(pdfRenderer) {
+                val page = pdfRenderer.openPage(position)
+
+                // Calculate dimensions - allow larger sizes for zoom (up to 4x zoom on high-res screens)
+                val maxWidth = 8192  // Allow significant zoom while preventing OutOfMemory
+                val scale = scaleFactor * initialScale
+                var width = (page.width * scale).toInt()
+                var height = (page.height * scale).toInt()
+
+                // Only scale down if exceeds memory-safe limit
+                if (width > maxWidth) {
+                    val ratio = maxWidth.toFloat() / width
+                    width = maxWidth
+                    height = (height * ratio).toInt()
+                }
+
+                val bitmap = android.graphics.Bitmap.createBitmap(
+                    width,
+                    height,
+                    android.graphics.Bitmap.Config.ARGB_8888
+                )
+
+                val canvas = Canvas(bitmap)
+                canvas.drawColor(Color.WHITE)
+
+                // Calculate render scale
+                val renderScale = width.toFloat() / page.width
+                val matrix = android.graphics.Matrix()
+                matrix.setScale(renderScale, renderScale)
+
+                page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                page.close()
+
+                // Cache this bitmap (limit cache size to 5 pages for memory)
+                // Don't recycle old bitmaps - let GC handle cleanup to avoid crashes
+                if (bitmapCache.size >= 5) {
+                    // Remove oldest entries from cache
+                    val keysToRemove = bitmapCache.keys.take(bitmapCache.size - 3)
+                    keysToRemove.forEach { key ->
+                        bitmapCache.remove(key)  // Just remove, don't recycle
+                    }
+                }
+                bitmapCache[position] = bitmap
+
+                return bitmap
+            }
+        }
+
+        override fun getItemCount(): Int = pdfRenderer.pageCount
+
+        fun updateZoom(newZoom: Float) {
+            scaleFactor = newZoom
+
+            // Clear cache - don't recycle bitmaps, let GC handle cleanup
+            // Recycling causes crashes when RecyclerView is still drawing old bitmaps
+            // For a 3-page cache, the temporary memory overhead is acceptable
+            bitmapCache.clear()
+
+            // Trigger re-render of all visible pages at new zoom level
+            notifyDataSetChanged()
+        }
+
+        fun cleanup() {
+            bitmapCache.values.forEach { it.recycle() }
+            bitmapCache.clear()
         }
     }
+
+    private class PDFPageViewHolder(val imageView: ZoomableImageView) : RecyclerView.ViewHolder(imageView)
 }
