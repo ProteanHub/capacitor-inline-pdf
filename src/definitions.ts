@@ -58,7 +58,13 @@ export interface InlinePDFPlugin {
    * Destroy a PDF viewer instance
    */
   destroy(options: DestroyOptions): Promise<void>;
-  
+
+  /**
+   * Get layout information for debugging positioning issues (Android only)
+   * Returns system insets, WebView position, and device info
+   */
+  getLayoutInfo(): Promise<LayoutInfo>;
+
   /**
    * Add event listener for gesture start
    */
@@ -206,4 +212,23 @@ export interface OverlayActionEvent {
     buttonId?: string;   // For button presses
     customData?: any;    // Any custom data passed from overlay
   };
+}
+
+/**
+ * Layout information for debugging positioning issues (Android only)
+ */
+export interface LayoutInfo {
+  systemInsetTop: number;
+  systemInsetBottom: number;
+  webViewOffsetX: number;
+  webViewOffsetY: number;
+  webViewScreenX: number;
+  webViewScreenY: number;
+  webViewWidth: number;
+  webViewHeight: number;
+  parentScreenX: number;
+  parentScreenY: number;
+  screenWidth: number;
+  screenHeight: number;
+  density: number;
 }

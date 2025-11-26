@@ -1,6 +1,6 @@
 import { WebPlugin } from '@capacitor/core';
 
-import type { 
+import type {
   InlinePDFPlugin,
   CreateOptions,
   LoadPDFOptions,
@@ -14,7 +14,8 @@ import type {
   DestroyOptions,
   ShowOverlayOptions,
   HideOverlayOptions,
-  UpdateOverlayOptions
+  UpdateOverlayOptions,
+  LayoutInfo
 } from './definitions';
 
 export class InlinePDFWeb extends WebPlugin implements InlinePDFPlugin {
@@ -136,6 +137,27 @@ export class InlinePDFWeb extends WebPlugin implements InlinePDFPlugin {
 
   async destroy(options: DestroyOptions): Promise<void> {
     this.viewers.delete(options.viewerId);
+  }
+
+  async getLayoutInfo(): Promise<LayoutInfo> {
+    // Web implementation returns placeholder values
+    // This is mainly useful for Android debugging
+    console.log('getLayoutInfo: Web implementation returns placeholder values');
+    return {
+      systemInsetTop: 0,
+      systemInsetBottom: 0,
+      webViewOffsetX: 0,
+      webViewOffsetY: 0,
+      webViewScreenX: 0,
+      webViewScreenY: 0,
+      webViewWidth: window.innerWidth,
+      webViewHeight: window.innerHeight,
+      parentScreenX: 0,
+      parentScreenY: 0,
+      screenWidth: window.screen.width,
+      screenHeight: window.screen.height,
+      density: window.devicePixelRatio
+    };
   }
 
   private generateViewerId(): string {

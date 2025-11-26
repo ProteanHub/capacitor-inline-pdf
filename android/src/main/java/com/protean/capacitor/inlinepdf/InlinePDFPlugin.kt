@@ -1,10 +1,14 @@
 package com.protean.capacitor.inlinepdf
 
 import android.graphics.Color
+import android.os.Build
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.widget.FrameLayout
 import androidx.coordinatorlayout.widget.CoordinatorLayout
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -16,6 +20,63 @@ import java.util.UUID
 @CapacitorPlugin(name = "InlinePDF")
 class InlinePDFPlugin : Plugin() {
     private val pdfViews = mutableMapOf<String, InlinePDFView>()
+
+    /**
+     * Get system window insets (status bar, navigation bar) to properly position native views
+     * on edge-to-edge devices.
+     */
+    private fun getSystemInsets(): Pair<Int, Int> {
+        val webView = bridge.webView
+        var topInset = 0
+        var bottomInset = 0
+
+        try {
+            // Use WindowInsetsCompat for compatibility across Android versions
+            val windowInsets = ViewCompat.getRootWindowInsets(webView)
+            if (windowInsets != null) {
+                val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+                topInset = systemBars.top
+                bottomInset = systemBars.bottom
+                android.util.Log.d("InlinePDFPlugin", "System insets - top: $topInset, bottom: $bottomInset")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("InlinePDFPlugin", "Error getting system insets", e)
+        }
+
+        return Pair(topInset, bottomInset)
+    }
+
+    /**
+     * Check if the WebView has been offset by edge-to-edge configuration.
+     * On edge-to-edge devices, the WebView's parent might apply margins.
+     */
+    private fun getWebViewOffset(): Pair<Int, Int> {
+        val webView = bridge.webView
+        var offsetY = 0
+        var offsetX = 0
+
+        try {
+            // Get the WebView's location on screen
+            val webViewLocation = IntArray(2)
+            webView.getLocationOnScreen(webViewLocation)
+
+            // Get the parent's location on screen
+            val parent = webView.parent as? View
+            if (parent != null) {
+                val parentLocation = IntArray(2)
+                parent.getLocationOnScreen(parentLocation)
+
+                // The offset is the difference between WebView and parent positions
+                offsetX = webViewLocation[0] - parentLocation[0]
+                offsetY = webViewLocation[1] - parentLocation[1]
+                android.util.Log.d("InlinePDFPlugin", "WebView offset - x: $offsetX, y: $offsetY")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("InlinePDFPlugin", "Error getting WebView offset", e)
+        }
+
+        return Pair(offsetX, offsetY)
+    }
 
     override fun load() {
         super.load()
@@ -54,26 +115,52 @@ class InlinePDFPlugin : Plugin() {
             call.reject("Missing containerId")
             return
         }
-        
+
         val rect = call.getObject("rect") ?: run {
             call.reject("Missing rect")
             return
         }
-        
+
         val x = rect.getDouble("x")?.toFloat() ?: 0f
         val y = rect.getDouble("y")?.toFloat() ?: 0f
         val width = rect.getDouble("width")?.toInt() ?: 0
         val height = rect.getDouble("height")?.toInt() ?: 0
-        
+
         val viewerId = UUID.randomUUID().toString()
-        
+
         activity.runOnUiThread {
             try {
+                // Get WebView offset to properly position the PDF view
+                // This accounts for edge-to-edge configurations where the WebView
+                // might be offset from the parent container
+                val (webViewOffsetX, webViewOffsetY) = getWebViewOffset()
+
+                // Also get system insets in case the WebView itself is edge-to-edge
+                // but the coordinates from JS don't account for system bars
+                val (systemInsetTop, systemInsetBottom) = getSystemInsets()
+
+                // On edge-to-edge devices, the WebView typically starts at y=0 (top of screen)
+                // but the content is padded. The coordinates from JS are relative to
+                // the WebView's visible content area, not the screen.
+                // If WebView has no offset (starts at screen top), we need to use the
+                // coordinates as-is since JS already accounts for the header position.
+                // If WebView has an offset, we add it.
+
+                // Use WebView offset if it's significant, otherwise the JS coordinates
+                // should already be correct relative to the WebView coordinate system
+                val adjustedX = x.toInt() + webViewOffsetX
+                val adjustedY = y.toInt() + webViewOffsetY
+
+                android.util.Log.d("InlinePDFPlugin", "Creating PDF view with rect: x=$x, y=$y, w=$width, h=$height")
+                android.util.Log.d("InlinePDFPlugin", "WebView offset: x=$webViewOffsetX, y=$webViewOffsetY")
+                android.util.Log.d("InlinePDFPlugin", "System insets: top=$systemInsetTop, bottom=$systemInsetBottom")
+                android.util.Log.d("InlinePDFPlugin", "Adjusted coordinates: x=$adjustedX, y=$adjustedY")
+
                 // Create PDF view
                 val pdfView = InlinePDFView(context).apply {
                     layoutParams = CoordinatorLayout.LayoutParams(width, height).apply {
-                        leftMargin = x.toInt()
-                        topMargin = y.toInt()
+                        leftMargin = adjustedX
+                        topMargin = adjustedY
                     }
 
                     // CRITICAL: Enable touch event handling
@@ -98,22 +185,34 @@ class InlinePDFPlugin : Plugin() {
                 
                 // Set up callbacks
                 pdfView.onGestureStart = {
+                    android.util.Log.d("InlinePDFPlugin", "Gesture started")
                     notifyListeners("gestureStart", JSObject())
                 }
-                
+
                 pdfView.onGestureEnd = {
+                    android.util.Log.d("InlinePDFPlugin", "Gesture ended")
                     notifyListeners("gestureEnd", JSObject())
                 }
-                
+
                 pdfView.onPageChanged = { page ->
+                    android.util.Log.d("InlinePDFPlugin", "Page changed to: $page")
                     notifyListeners("pageChanged", JSObject().apply {
                         put("page", page)
                     })
                 }
-                
+
                 pdfView.onZoomChanged = { zoom ->
+                    android.util.Log.d("InlinePDFPlugin", "Zoom changed to: $zoom")
                     notifyListeners("zoomChanged", JSObject().apply {
                         put("zoom", zoom)
+                    })
+                }
+
+                // Link clicked callback - notifies JS when a link is tapped
+                pdfView.onLinkClicked = { uri ->
+                    android.util.Log.d("InlinePDFPlugin", "Link clicked: $uri")
+                    notifyListeners("linkClicked", JSObject().apply {
+                        put("uri", uri)
                     })
                 }
                 
@@ -132,7 +231,10 @@ class InlinePDFPlugin : Plugin() {
                 }
 
                 pdfViews[viewerId] = pdfView
-                
+
+                // Pass plugin reference to enable FAB functionality
+                pdfView.setPlugin(this@InlinePDFPlugin)
+
                 call.resolve(JSObject().apply {
                     put("viewerId", viewerId)
                 })
@@ -144,34 +246,44 @@ class InlinePDFPlugin : Plugin() {
     
     @PluginMethod
     fun loadPDF(call: PluginCall) {
+        android.util.Log.d("InlinePDFPlugin", "loadPDF called")
+
         val viewerId = call.getString("viewerId") ?: run {
+            android.util.Log.e("InlinePDFPlugin", "loadPDF: Missing viewerId")
             call.reject("Missing viewerId")
             return
         }
-        
+
+        android.util.Log.d("InlinePDFPlugin", "loadPDF: viewerId=$viewerId")
+
         val pdfView = pdfViews[viewerId] ?: run {
+            android.util.Log.e("InlinePDFPlugin", "loadPDF: Invalid viewer ID - $viewerId not in ${pdfViews.keys}")
             call.reject("Invalid viewer ID")
             return
         }
-        
+
         activity.runOnUiThread {
             try {
                 when {
                     call.getString("url") != null -> {
                         val url = call.getString("url")!!
+                        android.util.Log.d("InlinePDFPlugin", "loadPDF: Loading from URL: $url")
                         pdfView.loadFromUrl(url)
                         call.resolve()
                     }
                     call.getString("path") != null -> {
                         val path = call.getString("path")!!
+                        android.util.Log.d("InlinePDFPlugin", "loadPDF: Loading from path: $path")
                         pdfView.loadFromPath(path)
                         call.resolve()
                     }
                     else -> {
+                        android.util.Log.e("InlinePDFPlugin", "loadPDF: No URL or path provided")
                         call.reject("No URL or path provided")
                     }
                 }
             } catch (e: Exception) {
+                android.util.Log.e("InlinePDFPlugin", "loadPDF: Failed to load PDF", e)
                 call.reject("Failed to load PDF", e)
             }
         }
@@ -287,27 +399,40 @@ class InlinePDFPlugin : Plugin() {
             call.reject("Missing viewerId")
             return
         }
-        
+
         val rect = call.getObject("rect") ?: run {
             call.reject("Missing rect")
             return
         }
-        
+
         val pdfView = pdfViews[viewerId] ?: run {
             call.reject("Invalid viewer ID")
             return
         }
-        
+
         val x = rect.getDouble("x")?.toFloat() ?: 0f
         val y = rect.getDouble("y")?.toFloat() ?: 0f
         val width = rect.getDouble("width")?.toInt() ?: 0
         val height = rect.getDouble("height")?.toInt() ?: 0
-        
+
         activity.runOnUiThread {
             try {
+                // Get WebView offset to properly position the PDF view
+                val (webViewOffsetX, webViewOffsetY) = getWebViewOffset()
+                val (systemInsetTop, systemInsetBottom) = getSystemInsets()
+
+                // Adjust coordinates to account for WebView's position within parent
+                val adjustedX = x.toInt() + webViewOffsetX
+                val adjustedY = y.toInt() + webViewOffsetY
+
+                android.util.Log.d("InlinePDFPlugin", "Updating PDF rect: x=$x, y=$y, w=$width, h=$height")
+                android.util.Log.d("InlinePDFPlugin", "WebView offset: x=$webViewOffsetX, y=$webViewOffsetY")
+                android.util.Log.d("InlinePDFPlugin", "System insets: top=$systemInsetTop, bottom=$systemInsetBottom")
+                android.util.Log.d("InlinePDFPlugin", "Adjusted coordinates: x=$adjustedX, y=$adjustedY")
+
                 pdfView.layoutParams = CoordinatorLayout.LayoutParams(width, height).apply {
-                    leftMargin = x.toInt()
-                    topMargin = y.toInt()
+                    leftMargin = adjustedX
+                    topMargin = adjustedY
                 }
                 pdfView.requestLayout()
                 call.resolve()
@@ -447,6 +572,61 @@ class InlinePDFPlugin : Plugin() {
             put("data", data)
         }
         notifyListeners("overlayAction", eventData)
+    }
+
+    /**
+     * Get system layout information for debugging positioning issues.
+     * Returns information about system insets, WebView position, and device pixel ratio.
+     */
+    @PluginMethod
+    fun getLayoutInfo(call: PluginCall) {
+        activity.runOnUiThread {
+            try {
+                val webView = bridge.webView
+                val (systemInsetTop, systemInsetBottom) = getSystemInsets()
+                val (webViewOffsetX, webViewOffsetY) = getWebViewOffset()
+
+                // Get WebView's actual position on screen
+                val webViewLocation = IntArray(2)
+                webView.getLocationOnScreen(webViewLocation)
+
+                // Get WebView dimensions
+                val webViewWidth = webView.width
+                val webViewHeight = webView.height
+
+                // Get parent info
+                val parent = webView.parent as? View
+                val parentLocation = IntArray(2)
+                parent?.getLocationOnScreen(parentLocation)
+
+                // Get screen dimensions
+                val displayMetrics = context.resources.displayMetrics
+                val screenWidth = displayMetrics.widthPixels
+                val screenHeight = displayMetrics.heightPixels
+                val density = displayMetrics.density
+
+                val result = JSObject().apply {
+                    put("systemInsetTop", systemInsetTop)
+                    put("systemInsetBottom", systemInsetBottom)
+                    put("webViewOffsetX", webViewOffsetX)
+                    put("webViewOffsetY", webViewOffsetY)
+                    put("webViewScreenX", webViewLocation[0])
+                    put("webViewScreenY", webViewLocation[1])
+                    put("webViewWidth", webViewWidth)
+                    put("webViewHeight", webViewHeight)
+                    put("parentScreenX", parentLocation[0])
+                    put("parentScreenY", parentLocation[1])
+                    put("screenWidth", screenWidth)
+                    put("screenHeight", screenHeight)
+                    put("density", density)
+                }
+
+                android.util.Log.d("InlinePDFPlugin", "Layout info: $result")
+                call.resolve(result)
+            } catch (e: Exception) {
+                call.reject("Failed to get layout info", e)
+            }
+        }
     }
 
     override fun handleOnDestroy() {

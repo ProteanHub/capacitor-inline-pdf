@@ -84,6 +84,7 @@ await InlinePDF.loadPDF({
 * [`hideOverlay(...)`](#hideoverlay)
 * [`updateOverlayContent(...)`](#updateoverlaycontent)
 * [`destroy(...)`](#destroy)
+* [`getLayoutInfo()`](#getlayoutinfo)
 * [`addListener('gestureStart', ...)`](#addlistenergesturestart-)
 * [`addListener('gestureEnd', ...)`](#addlistenergestureend-)
 * [`addListener('pageChanged', ...)`](#addlistenerpagechanged-)
@@ -278,6 +279,20 @@ Destroy a PDF viewer instance
 | Param         | Type                                                      |
 | ------------- | --------------------------------------------------------- |
 | **`options`** | <code><a href="#destroyoptions">DestroyOptions</a></code> |
+
+--------------------
+
+
+### getLayoutInfo()
+
+```typescript
+getLayoutInfo() => Promise<LayoutInfo>
+```
+
+Get layout information for debugging positioning issues (Android only)
+Returns system insets, WebView position, and device info
+
+**Returns:** <code>Promise&lt;<a href="#layoutinfo">LayoutInfo</a>&gt;</code>
 
 --------------------
 
@@ -506,6 +521,27 @@ Add event listener for overlay actions (link taps, dismissal, etc)
 | Prop           | Type                |
 | -------------- | ------------------- |
 | **`viewerId`** | <code>string</code> |
+
+
+#### LayoutInfo
+
+Layout information for debugging positioning issues (Android only)
+
+| Prop                    | Type                |
+| ----------------------- | ------------------- |
+| **`systemInsetTop`**    | <code>number</code> |
+| **`systemInsetBottom`** | <code>number</code> |
+| **`webViewOffsetX`**    | <code>number</code> |
+| **`webViewOffsetY`**    | <code>number</code> |
+| **`webViewScreenX`**    | <code>number</code> |
+| **`webViewScreenY`**    | <code>number</code> |
+| **`webViewWidth`**      | <code>number</code> |
+| **`webViewHeight`**     | <code>number</code> |
+| **`parentScreenX`**     | <code>number</code> |
+| **`parentScreenY`**     | <code>number</code> |
+| **`screenWidth`**       | <code>number</code> |
+| **`screenHeight`**      | <code>number</code> |
+| **`density`**           | <code>number</code> |
 
 
 #### OverlayActionEvent
