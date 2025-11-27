@@ -66,9 +66,9 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 
     // AndroidPdfViewer - pdfium-based PDF rendering with native performance
-    // Using TalbotGooday's fork which is migrated to AndroidX
-    // https://github.com/TalbotGooday/AndroidPdfViewer
-    implementation 'com.github.TalbotGooday:AndroidPdfViewer:3.1.0-beta.3'
+    // Using marain87's fork which includes 16KB page size support for Android 15+
+    // https://github.com/marain87/AndroidPdfViewer
+    implementation 'com.github.marain87:AndroidPdfViewer:3.2.8'
 
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
