@@ -18,6 +18,12 @@ export interface InlinePDFPlugin {
    * Navigate to a specific page
    */
   goToPage(options: GoToPageOptions): Promise<void>;
+
+  /**
+   * Navigate to a specific search result by index (iOS only)
+   * Highlights the current result in orange, others in yellow
+   */
+  goToSearchResult(options: GoToSearchResultOptions): Promise<void>;
   
   /**
    * Get current state of the PDF viewer
@@ -122,6 +128,12 @@ export interface SearchResult {
 export interface GoToPageOptions {
   viewerId: string;
   page: number;
+  animated?: boolean;
+}
+
+export interface GoToSearchResultOptions {
+  viewerId: string;
+  index: number;  // 0-based index into search results
   animated?: boolean;
 }
 

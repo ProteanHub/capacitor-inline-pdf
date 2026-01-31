@@ -7,6 +7,7 @@ import type {
   SearchOptions,
   SearchResult,
   GoToPageOptions,
+  GoToSearchResultOptions,
   GetStateOptions,
   PDFState,
   UpdateRectOptions,
@@ -60,8 +61,18 @@ export class InlinePDFWeb extends WebPlugin implements InlinePDFPlugin {
     if (!viewer) {
       throw new Error(`Viewer with id ${options.viewerId} not found`);
     }
-    
+
     viewer.state.currentPage = options.page;
+  }
+
+  async goToSearchResult(options: GoToSearchResultOptions): Promise<void> {
+    const viewer = this.viewers.get(options.viewerId);
+    if (!viewer) {
+      throw new Error(`Viewer with id ${options.viewerId} not found`);
+    }
+
+    // Web implementation - no native search highlighting support
+    console.log('goToSearchResult: Web implementation (no-op), index:', options.index);
   }
 
   async getState(options: GetStateOptions): Promise<PDFState> {

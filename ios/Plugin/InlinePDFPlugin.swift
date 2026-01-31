@@ -186,11 +186,27 @@ public class InlinePDFPlugin: CAPPlugin {
             call.reject("Invalid parameters")
             return
         }
-        
+
         let animated = call.getBool("animated") ?? true
-        
+
         DispatchQueue.main.async {
             pdfVC.goToPage(page, animated: animated)
+            call.resolve()
+        }
+    }
+
+    @objc func goToSearchResult(_ call: CAPPluginCall) {
+        guard let viewerId = call.getString("viewerId"),
+              let pdfVC = pdfViews[viewerId],
+              let index = call.getInt("index") else {
+            call.reject("Invalid parameters")
+            return
+        }
+
+        let animated = call.getBool("animated") ?? true
+
+        DispatchQueue.main.async {
+            pdfVC.goToSearchResult(index, animated: animated)
             call.resolve()
         }
     }

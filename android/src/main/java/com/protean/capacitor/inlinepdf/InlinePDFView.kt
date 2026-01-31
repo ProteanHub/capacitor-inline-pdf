@@ -496,7 +496,33 @@ class InlinePDFView @JvmOverloads constructor(
         overlayWebView = WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            webViewClient = WebViewClient()
+            // Custom WebViewClient to intercept app:// URLs and send to Capacitor
+            webViewClient = object : WebViewClient() {
+                @Deprecated("Deprecated in Java")
+                override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                    return handleUrlLoading(url)
+                }
+
+                override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                    return handleUrlLoading(request?.url?.toString())
+                }
+
+                private fun handleUrlLoading(url: String?): Boolean {
+                    if (url == null) return false
+
+                    // Intercept app:// URLs and send to Capacitor as linkTapped event
+                    if (url.startsWith("app://")) {
+                        logDebug("Intercepted app:// URL: $url")
+                        plugin?.sendOverlayAction("linkTapped", JSObject().apply {
+                            put("url", url)
+                        })
+                        return true // Prevent WebView from loading this URL
+                    }
+
+                    // For other URLs, allow default handling
+                    return false
+                }
+            }
             setBackgroundColor(Color.parseColor(style?.getString("backgroundColor") ?: "#FFFFFF"))
             loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
             isClickable = true

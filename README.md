@@ -76,6 +76,7 @@ await InlinePDF.loadPDF({
 * [`loadPDF(...)`](#loadpdf)
 * [`search(...)`](#search)
 * [`goToPage(...)`](#gotopage)
+* [`goToSearchResult(...)`](#gotosearchresult)
 * [`getState(...)`](#getstate)
 * [`updateRect(...)`](#updaterect)
 * [`resetZoom(...)`](#resetzoom)
@@ -157,6 +158,22 @@ Navigate to a specific page
 | Param         | Type                                                        |
 | ------------- | ----------------------------------------------------------- |
 | **`options`** | <code><a href="#gotopageoptions">GoToPageOptions</a></code> |
+
+--------------------
+
+
+### goToSearchResult(...)
+
+```typescript
+goToSearchResult(options: GoToSearchResultOptions) => Promise<void>
+```
+
+Navigate to a specific search result by index (iOS only)
+Highlights the current result in orange, others in yellow
+
+| Param         | Type                                                                        |
+| ------------- | --------------------------------------------------------------------------- |
+| **`options`** | <code><a href="#gotosearchresultoptions">GoToSearchResultOptions</a></code> |
 
 --------------------
 
@@ -446,6 +463,15 @@ Add event listener for overlay actions (link taps, dismissal, etc)
 | -------------- | -------------------- |
 | **`viewerId`** | <code>string</code>  |
 | **`page`**     | <code>number</code>  |
+| **`animated`** | <code>boolean</code> |
+
+
+#### GoToSearchResultOptions
+
+| Prop           | Type                 |
+| -------------- | -------------------- |
+| **`viewerId`** | <code>string</code>  |
+| **`index`**    | <code>number</code>  |
 | **`animated`** | <code>boolean</code> |
 
 

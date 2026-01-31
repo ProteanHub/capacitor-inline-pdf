@@ -497,7 +497,7 @@ class InlinePDFViewController: UIViewController {
               let page = document.page(at: pageNumber - 1) else {
             return
         }
-        
+
         if animated {
             UIView.animate(withDuration: 0.3) {
                 self.pdfView.go(to: page)
@@ -505,6 +505,58 @@ class InlinePDFViewController: UIViewController {
         } else {
             pdfView.go(to: page)
         }
+    }
+
+    /**
+     * Navigate to a specific search result and highlight it in orange
+     * Other matches remain highlighted in yellow
+     */
+    func goToSearchResult(_ index: Int, animated: Bool) {
+        guard index >= 0 && index < currentSearchSelections.count else {
+            print("InlinePDFViewController: Invalid search result index: \(index)")
+            return
+        }
+
+        // Clear existing highlights first to force refresh
+        pdfView.highlightedSelections = nil
+
+        // Reset all selections to yellow (background matches)
+        for selection in currentSearchSelections {
+            selection.color = UIColor.yellow.withAlphaComponent(0.5)
+        }
+
+        // Set the current selection to orange (more visible)
+        let currentSelection = currentSearchSelections[index]
+        currentSelection.color = UIColor.orange
+
+        // Re-apply highlighted selections with updated colors
+        pdfView.highlightedSelections = currentSearchSelections
+
+        // Also set as currentSelection which PDFKit may render differently
+        pdfView.currentSelection = currentSelection
+
+        // Navigate to the selection with offset so it's not at the very top
+        if let page = currentSelection.pages.first {
+            let bounds = currentSelection.bounds(for: page)
+
+            // Add vertical offset to position the match lower on screen (not cut off by header)
+            // In PDF coordinates, Y increases upward, so we ADD to move the viewport up
+            // This puts the match about 1/3 down from the top of the visible area
+            let verticalOffset: CGFloat = 150  // Points to offset downward on screen
+            let destinationY = bounds.midY + verticalOffset
+
+            let destination = PDFDestination(page: page, at: CGPoint(x: bounds.midX, y: destinationY))
+
+            if animated {
+                UIView.animate(withDuration: 0.3) {
+                    self.pdfView.go(to: destination)
+                }
+            } else {
+                pdfView.go(to: destination)
+            }
+        }
+
+        print("InlinePDFViewController: Navigated to search result \(index + 1) of \(currentSearchSelections.count), current color: orange")
     }
     
     func getState() -> PDFState {

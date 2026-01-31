@@ -6,6 +6,7 @@ CAP_PLUGIN(InlinePDFPlugin, "InlinePDF",
   CAP_PLUGIN_METHOD(loadPDF, CAPPluginReturnPromise);
   CAP_PLUGIN_METHOD(search, CAPPluginReturnPromise);
   CAP_PLUGIN_METHOD(goToPage, CAPPluginReturnPromise);
+  CAP_PLUGIN_METHOD(goToSearchResult, CAPPluginReturnPromise);
   CAP_PLUGIN_METHOD(getState, CAPPluginReturnPromise);
   CAP_PLUGIN_METHOD(updateRect, CAPPluginReturnPromise);
   CAP_PLUGIN_METHOD(resetZoom, CAPPluginReturnPromise);
